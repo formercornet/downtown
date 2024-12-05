@@ -82,24 +82,44 @@ def register():
     return jsonify({'message': 'Registration successful!'}), 201
 
 # Login Route - Generate JWT token
+import jwt
+from flask import Flask, request, jsonify
+from werkzeug.security import check_password_hash
+from datetime import datetime, timedelta
+import os
+
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
+
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Missing email or password!'}), 400
+
     email = data.get('email')
     password = data.get('password')
 
-    # Find the user by email
+    # Fetch the user from the database
     user = User.query.filter_by(email=email).first()
-    if user and check_password_hash(user.password_hash, password):
-        # Generate JWT token
-        token = jwt.encode({
-            'user_id': user.user_id,
-            'exp': datetime.utcnow() + timedelta(hours=1)  # Token expires in 1 hour
-        }, app.secret_key, algorithm="HS256")
-        
-        return jsonify({'message': 'Login successful!', 'token': token}), 200
-    else:
+    if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'message': 'Invalid email or password!'}), 400
+
+    try:
+        # Generate JWT token
+        token = jwt.encode(
+            {
+                'user_id': user.user_id,
+                'exp': datetime.utcnow() + timedelta(hours=1)  # Expiration in 1 hour
+            },
+            app.secret_key,  # Use the secret key
+            algorithm="HS256"
+        )
+
+        return jsonify({'message': 'Login successful!', 'token': token}), 200
+
+    except Exception as e:
+        return jsonify({'message': 'Token generation failed!', 'error': str(e)}), 500
+
 
 # Protected Route (Example)
 @app.route('/profile', methods=['GET'])
