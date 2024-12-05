@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .  # Build from the backend folder
+      dockerfile: Dockerfile  # Explicitly point to the Dockerfile in the backend folder
+    ports:
+      - "5000:5000"  # Map port 5000
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - FLASK_ENV=development
+    volumes:
+      - .   # Mount the backend directory to /backend inside the container
+    command: python3 app.py  # Run app.py inside /backend directory
+    networks:
+      - backend_network
+
+networks:
+  backend_network:
+    driver: bridge

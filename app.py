@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS  # Import Flask-CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta
@@ -17,6 +18,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.secret_key = os.getenv('JWT_SECRET_KEY')  # Get the secret key from the .env file
 
 db = SQLAlchemy(app)
+
+# Enable CORS for the app
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from any origin
 
 # Table 1: User Model
 class User(db.Model):
@@ -110,4 +114,3 @@ def profile(current_user):
 # Run the app
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
-
