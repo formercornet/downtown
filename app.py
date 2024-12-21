@@ -7,9 +7,8 @@ from datetime import datetime, timedelta
 import jwt
 import os
 from dotenv import load_dotenv
-from flask_oauthlib.client import OAuth
+from flask_oauth import OAuth
 from flask_login import LoginManager, login_user, UserMixin
-
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -25,7 +24,8 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 db = SQLAlchemy(app)
 
-oauth = OAuth(app)
+oauth = OAuth()
+oauth.init_app(app)
 login_manager = LoginManager(app)
 
 google = oauth.remote_app(
