@@ -96,12 +96,24 @@ with app.app_context():
 
 @app.route('/auth/google')
 def google_login():
-    # Initiates OAuth flow
+    # Generate a unique state to prevent CSRF
+    state = os.urandom(24).hex()  # Generate a random state
+    session['oauth_state'] = state  # Store state in session
+    
     redirect_uri = url_for('google_callback', _external=True)
-    return google.authorize_redirect(redirect_uri)
+    return google.authorize_redirect(redirect_uri, state=state)  # Pass state with the redirect
+
 
 @app.route('/auth/google/callback')
 def google_callback():
+    # Get the state from the callback request
+    state_in_request = request.args.get('state')
+    state_in_session = session.get('oauth_state')
+
+    # Verify if the state matches to prevent CSRF attacks
+    if state_in_request != state_in_session:
+        return jsonify({"error": "CSRF attack detected!"}), 400
+
     # Get the OAuth response and fetch user info
     token = google.authorize_access_token()
     user_info = google.get('userinfo').json()
@@ -125,6 +137,7 @@ def google_callback():
     login_user(user)
 
     return 'Logged in successfully', 200
+
 
 # Manually define a function to retrieve the Google token if needed
 def get_google_token():
