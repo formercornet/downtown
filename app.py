@@ -42,7 +42,7 @@ google = oauth.register(
 )
 
 # Enable CORS for the app
-CORS(app, resources={r"/*": {"origins": "*"}})  # Allow requests from any origin
+CORS(app, resources={r"/*": {"origins": "https://downtown-production.up.railway.app"}})  # Allow requests from any origin
 
 # Table 1: User Model
 class User(db.Model):
