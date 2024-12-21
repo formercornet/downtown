@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, session, redirect, url_for
+from flask import Flask, request, jsonify, session, redirect, url_for, current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 from functools import wraps
 from datetime import datetime, timedelta
 import jwt
@@ -157,6 +158,8 @@ class Post(db.Model):
     downvotes = db.Column(db.Integer, default=0)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     comments = db.relationship('Comment', backref='post', lazy=True)
+    media_type = db.Column(db.String(50), nullable=True)  # Optional field
+    media_uri = db.Column(db.String(255), nullable=True)  # Optional field
 
     def to_dict(self):
         return {
@@ -166,8 +169,10 @@ class Post(db.Model):
             'upvotes': self.upvotes,
             'downvotes': self.downvotes,
             'timestamp': self.timestamp.isoformat(),
-            'comments': [comment.to_dict() for comment in self.comments]
+            'comments': [comment.to_dict() for comment in self.comments],
+            'media': {'type': self.media_type, 'uri': self.media_uri} if self.media_uri else None  # Optional media
         }
+
 
 
 class Comment(db.Model):
@@ -339,16 +344,21 @@ def get_posts():
 def create_post():
     data = request.get_json()
     content = data.get('content')
-    author = data.get('author')
+    author_username = data.get('author')  # Assuming the author is identified by username
     media = data.get('media')  # Media should be passed as a dictionary containing type and uri
 
-    if not content or not author:
+    if not content or not author_username:
         return jsonify({"message": "Content and author are required"}), 400
 
+    # Find the user by username
+    author = User.query.filter_by(username=author_username).first()
+
+    if not author:
+        return jsonify({"message": "Author not found"}), 404
+
     post = Post(
-        id=str(datetime.utcnow().timestamp()),  # Unique ID based on timestamp
         content=content,
-        author=author,
+        author_id=author.user_id,  # Link post to the actual User ID
         media_type=media['type'] if media else None,
         media_uri=media['uri'] if media else None
     )
@@ -423,16 +433,28 @@ def vote_on_post(post_id):
 # 6. Upload media (image/video)
 @app.route('/media/upload', methods=['POST'])
 def upload_media():
-    file = request.files['file']
+    file = request.files.get('file')
     file_type = request.form.get('type')  # 'image' or 'video'
 
     if not file or file_type not in ['image', 'video']:
         return jsonify({"message": "Invalid file or type"}), 400
 
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+    # Check if file extension is valid
+    allowed_extensions = {'jpg', 'jpeg', 'png', 'gif', 'mp4', 'mov', 'avi'}
+    filename = secure_filename(file.filename)
+    file_extension = filename.rsplit('.', 1)[-1].lower()
+
+    if file_extension not in allowed_extensions:
+        return jsonify({"message": "Invalid file extension"}), 400
+
+    # Define the file path for storing media (Make sure the folder exists)
+    file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
     file.save(file_path)
 
-    return jsonify({"message": "Media uploaded successfully", "uri": file_path, "type": file_type})
+    # Assuming you'd serve the media from a URL
+    media_url = f"{request.host_url}media/{filename}"
+
+    return jsonify({"message": "Media uploaded successfully", "uri": media_url, "type": file_type}), 201
 
 # Run the app
 if __name__ == '__main__':
