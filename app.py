@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 from flask_oauth import OAuth
 from flask_login import LoginManager, login_user, UserMixin
+from urllib.parse import urljoin
 
 # Load environment variables from the .env file
 load_dotenv()
