@@ -105,10 +105,13 @@ def google_callback():
     # Get the OAuth response and fetch user info
     token = google.authorize_access_token()
     user_info = google.get('userinfo').json()
-    
+
+    # Store the token in the session
+    session['google_token'] = token
+
     # Extract email from the response
     email = user_info['email']
-    
+
     # Check if the user already exists in the database
     existing_user = User.query.filter_by(email=email).first()
     if not existing_user:
@@ -123,9 +126,10 @@ def google_callback():
 
     return 'Logged in successfully', 200
 
-@google.tokengetter
+# Manually define a function to retrieve the Google token if needed
 def get_google_token():
     return session.get('google_token')
+
 
 def token_required(f):
     @wraps(f)
