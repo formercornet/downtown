@@ -1,13 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS  # Import Flask-CORS
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta
 import jwt
-from dotenv import load_dotenv
 import os
-from flask import Flask, redirect, url_for, session
+from dotenv import load_dotenv
 from flask_oauthlib.client import OAuth
 from flask_login import LoginManager, login_user, UserMixin
 
@@ -106,8 +105,19 @@ def google_callback():
 
     session['google_token'] = (resp['access_token'], '')
     user_info = google.get('userinfo').data
-    # Process user_info['email'], etc., for login/signup
+    email = user_info['email']
+    
+    # Check if the user already exists in the database
+    existing_user = User.query.filter_by(email=email).first()
+    if not existing_user:
+        # Create a new user if they don't exist
+        new_user = User(username=user_info['name'], email=email, password_hash=None)
+        db.session.add(new_user)
+        db.session.commit()
+
+    # Process the user information (e.g., log them in)
     return 'Logged in successfully', 200
+    
 
 @google.tokengetter
 def get_google_token():
@@ -161,13 +171,6 @@ def register():
     return jsonify({'message': 'Registration successful!'}), 201
 
 # Login Route - Generate JWT token
-import jwt
-from flask import Flask, request, jsonify
-from werkzeug.security import check_password_hash
-from datetime import datetime, timedelta
-import os
-
-
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
