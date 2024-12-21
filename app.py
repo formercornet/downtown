@@ -45,7 +45,7 @@ google = oauth.register(
 )
 
 # Initialize Flask-Mail
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # Example Gmail SMTP server
+app.config['MAIL_SERVER'] = 'smtp.mailtrap.io'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')  # Your email address
