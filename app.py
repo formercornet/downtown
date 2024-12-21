@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 from authlib.integrations.flask_client import OAuth  # Updated import
 from flask_login import LoginManager, login_user, UserMixin
 from urllib.parse import urljoin
+from flask_mail import Mail, Message
+import itsdangerous
+
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -40,6 +43,68 @@ google = oauth.register(
     refresh_token_url=None,
     client_kwargs={'scope': 'openid profile email'},
 )
+
+# Initialize Flask-Mail
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # Example Gmail SMTP server
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')  # Your email address
+app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')  # Your email password
+mail = Mail(app)
+
+# Initialize the URL serializer
+serializer = itsdangerous.URLSafeTimedSerializer(app.secret_key)
+
+# Request Password Reset (Step 1)
+@app.route('/request_password_reset', methods=['POST'])
+def request_password_reset():
+    data = request.get_json()
+    email = data.get('email')
+
+    # Check if the user exists
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'message': 'User with this email does not exist'}), 404
+
+    # Generate a token with the user's email
+    token = serializer.dumps(email, salt='password-reset-salt')
+
+    # Send the token via email
+    reset_url = url_for('reset_password', token=token, _external=True)
+    msg = Message('Password Reset Request', sender=os.getenv('MAIL_USERNAME'), recipients=[email])
+    msg.body = f'Click the link to reset your password: {reset_url}'
+    mail.send(msg)
+
+    return jsonify({'message': 'Password reset email sent!'}), 200
+
+# Reset Password (Step 2 & 3)
+@app.route('/reset_password/<token>', methods=['POST'])
+def reset_password(token):
+    try:
+        # Verify the token
+        email = serializer.loads(token, salt='password-reset-salt', max_age=3600)  # Token expires after 1 hour
+    except itsdangerous.SignatureExpired:
+        return jsonify({'message': 'The token is expired!'}), 400
+    except itsdangerous.BadSignature:
+        return jsonify({'message': 'Invalid token!'}), 400
+
+    data = request.get_json()
+    new_password = data.get('new_password')
+    password_confirm = data.get('password_confirm')
+
+    if new_password != password_confirm:
+        return jsonify({'message': 'Passwords do not match!'}), 400
+
+    # Update the password in the database
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    # Hash the new password and update the user's record
+    user.password_hash = generate_password_hash(new_password)
+    db.session.commit()
+
+    return jsonify({'message': 'Password has been reset successfully!'}), 200
 
 # Enable CORS for the app
 CORS(app, resources={r"/*": {"origins": "https://downtown-production.up.railway.app"}})  # Allow requests from any origin
