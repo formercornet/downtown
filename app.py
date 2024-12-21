@@ -12,6 +12,8 @@ from flask_login import LoginManager, login_user, UserMixin
 from urllib.parse import urljoin
 from flask_mail import Mail, Message
 import itsdangerous
+import uuid
+
 
 
 # Load environment variables from the .env file
@@ -77,12 +79,14 @@ def request_password_reset():
     token = serializer.dumps(email, salt='password-reset-salt')
 
     # Send the token via email
-    reset_url = url_for('reset_password', token=token, _external=True)
+    # Adjust the reset URL to point to your frontend page, assuming the frontend is hosted at localhost:3000
+    reset_url = f'http://localhost:8081/resetpassword?token={token}'
     msg = Message('Password Reset Request', sender=os.getenv('MAIL_USERNAME'), recipients=[email])
     msg.body = f'Click the link to reset your password: {reset_url}'
     mail.send(msg)
 
     return jsonify({'message': 'Password reset email sent!'}), 200
+
 
 # Reset Password (Step 2 & 3)
 @app.route('/reset_password', methods=['POST'])
@@ -123,8 +127,7 @@ def reset_password():
 
 
 # Enable CORS for the app
-CORS(app, resources={r"/*": {"origins": "https://downtown-production.up.railway.app"}})  # Allow requests from any origin
-
+CORS(app, resources={r"/*": {"origins": "*"}})  # Adjust for production
 # Table 1: User Model
 class User(db.Model):
     user_id = db.Column(db.Integer, primary_key=True)
@@ -132,44 +135,55 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128), nullable=False)
     role = db.Column(db.String(10), default='User')  # Admin or User
+    
+    # Define a relationship to Post
+    posts = db.relationship('Post', backref='author', lazy=True)
+    
+    def to_dict(self):
+        return {
+            'user_id': self.user_id,
+            'username': self.username,
+            'email': self.email,
+            'role': self.role,
+            'posts': [post.to_dict() for post in self.posts]  # Include posts in the user's dictionary representation
+        }
+
 
 class Post(db.Model):
-    id = db.Column(db.String, primary_key=True)
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))  # Auto-generate UUID as the id
     content = db.Column(db.String(500), nullable=False)
-    author = db.Column(db.String(100), nullable=False)
+    author_id = db.Column(db.Integer, db.ForeignKey('user.user_id'), nullable=False)  # Foreign key linking to User
     upvotes = db.Column(db.Integer, default=0)
     downvotes = db.Column(db.Integer, default=0)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     comments = db.relationship('Comment', backref='post', lazy=True)
-    media_type = db.Column(db.String(50), nullable=True)
-    media_uri = db.Column(db.String(255), nullable=True)
 
     def to_dict(self):
         return {
             'id': self.id,
             'content': self.content,
-            'author': self.author,
+            'author': self.author.username,  # Return the username of the author instead of the user_id
             'upvotes': self.upvotes,
             'downvotes': self.downvotes,
             'timestamp': self.timestamp.isoformat(),
-            'comments': [comment.to_dict() for comment in self.comments],
-            'media': {'type': self.media_type, 'uri': self.media_uri} if self.media_uri else None
+            'comments': [comment.to_dict() for comment in self.comments]
         }
 
+
 class Comment(db.Model):
-    id = db.Column(db.String, primary_key=True)
-    content = db.Column(db.String(300), nullable=False)
-    author = db.Column(db.String(100), nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String(500), nullable=False)
+    post_id = db.Column(db.String, db.ForeignKey('post.id'), nullable=False)  # Foreign key linking to Post
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    post_id = db.Column(db.String, db.ForeignKey('post.id'), nullable=False)
 
     def to_dict(self):
         return {
             'id': self.id,
             'content': self.content,
-            'author': self.author,
-            'timestamp': self.timestamp.isoformat()
+            'timestamp': self.timestamp.isoformat(),
+            'post_id': self.post_id
         }
+
 
 # Initialize the database (for testing purposes)
 with app.app_context():
