@@ -1,4 +1,4 @@
-Authlib==2.0.0
+Authlib==1.4.0
 bcrypt==4.2.1
 blinker==1.9.0
 click==8.1.7
