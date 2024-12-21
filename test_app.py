@@ -72,21 +72,24 @@ def test_reset_password(client):
         'password_confirm': 'password123'
     }
     client.post('/register', json=user_data)
-    
+
     # Generate a real token for password reset using the serializer
     token = serializer.dumps('test@example.com', salt='password-reset-salt')
-    
+
+    # Prepare the reset data
     reset_data = {
+        'token': token,
         'new_password': 'newpassword123',
         'password_confirm': 'newpassword123'
     }
 
-    # Perform the password reset request with the real token
-    response = client.post(f'/reset_password/{token}', json=reset_data)
-    
+    # Perform the password reset request
+    response = client.post('/reset_password', json=reset_data)
+
     # Assert that the response status code is 200 (OK)
     assert response.status_code == 200
     assert response.json['message'] == 'Password has been reset successfully!'
+
 
 
 def test_get_posts(client):
