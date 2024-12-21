@@ -28,10 +28,11 @@ git clone https://github.com/formercornet/El-Downtown.git
 Make sure to create a .env file in the project root with the following content:
 ```bash
 JWT_SECRET_KEY=your_secret_key
-DATABASE_URL=sqlite:///yourpath/database.db
-FLASK_ENV=development
-ONESIGNAL_APP_ID=your_onesignal_app_id
-ONESIGNAL_API_KEY=your_onesignal_api_key
+GOOGLE_CLIENT_ID=your_onesignal_app_id
+GOOGLE_CLIENT_SECRET=your_onesignal_api_key
+MAIL_USERNAME=your_mail_username
+MAIL_PASSWORD=your_mail_password
+
 ```
 
 **3. Build and run the app with Docker**

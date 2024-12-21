@@ -1,0 +1,247 @@
+import pytest
+from app import app, db, Post, Comment, User
+from werkzeug.security import generate_password_hash
+from itsdangerous import URLSafeTimedSerializer
+
+serializer = URLSafeTimedSerializer(app.secret_key)
+
+@pytest.fixture
+def client():
+    """Create a test client."""
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'  # In-memory DB
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        with app.app_context():
+            db.create_all()  # Set up DB
+        yield client
+        db.drop_all()  # Clean up after test
+
+# Register Route Test
+def test_register(client):
+    data = {
+        'username': 'testuser',
+        'email': 'test@example.com',
+        'password': 'password123',
+        'password_confirm': 'password123'
+    }
+    response = client.post('/register', json=data)
+    assert response.status_code == 201
+    assert b'Registration successful!' in response.data
+
+# Login Route Test
+def test_login(client):
+    user_data = {
+        'username': 'testuser',
+        'email': 'test@example.com',
+        'password': 'password123',
+        'password_confirm': 'password123'
+    }
+    client.post('/register', json=user_data)
+
+    login_data = {
+        'email': 'test@example.com',
+        'password': 'password123'
+    }
+    response = client.post('/login', json=login_data)
+    assert response.status_code == 200
+    assert b'Login successful!' in response.data
+
+# Password Reset Tests
+def test_request_password_reset(client):
+    user_data = {
+        'username': 'testuser',
+        'email': 'test@example.com',
+        'password': 'password123',
+        'password_confirm': 'password123'
+    }
+    client.post('/register', json=user_data)
+
+    reset_data = {'email': 'test@example.com'}
+    response = client.post('/request_password_reset', json=reset_data)
+    assert response.status_code == 200
+    assert b'Password reset email sent!' in response.data
+
+def test_reset_password(client):
+    # Register a new user for testing
+    user_data = {
+        'username': 'testuser',
+        'email': 'test@example.com',
+        'password': 'password123',
+        'password_confirm': 'password123'
+    }
+    client.post('/register', json=user_data)
+    
+    # Generate a real token for password reset using the serializer
+    token = serializer.dumps('test@example.com', salt='password-reset-salt')
+    
+    reset_data = {
+        'new_password': 'newpassword123',
+        'password_confirm': 'newpassword123'
+    }
+
+    # Perform the password reset request with the real token
+    response = client.post(f'/reset_password/{token}', json=reset_data)
+    
+    # Assert that the response status code is 200 (OK)
+    assert response.status_code == 200
+    assert response.json['message'] == 'Password has been reset successfully!'
+
+
+def test_get_posts(client):
+    # Create a sample post to ensure there is data to fetch
+    post_data = {
+        'content': 'This is a test post',
+        'author': 'Test Author',
+        'media': {'type': 'image', 'uri': 'http://example.com/image.jpg'}
+    }
+    client.post('/posts', json=post_data)
+
+    # Make a GET request to fetch the posts
+    response = client.get('/posts')
+    
+    # Assert the status code is 200 OK
+    assert response.status_code == 200
+
+    # Assert the response is a list of posts
+    posts = response.get_json()
+    assert isinstance(posts, list)
+    assert len(posts) > 0  # Ensure there is at least one post
+    assert 'content' in posts[0]
+    assert 'author' in posts[0]
+
+def test_create_post(client):
+    # Post data to create a new post
+    post_data = {
+        'content': 'This is a test post',
+        'author': 'Test Author',
+        'media': {'type': 'image', 'uri': 'http://example.com/image.jpg'}
+    }
+
+    # Make a POST request to create a new post
+    response = client.post('/posts', json=post_data)
+    
+    # Assert the status code is 201 Created
+    assert response.status_code == 201
+
+    # Assert that the response contains the post data and that the ID is generated
+    post = response.get_json()
+    assert 'id' in post
+    assert post['content'] == 'This is a test post'
+    assert post['author'] == 'Test Author'
+
+def test_edit_post(client):
+    # First, create a new post
+    post_data = {
+        'content': 'Initial content',
+        'author': 'Test Author',
+        'media': {'type': 'image', 'uri': 'http://example.com/image.jpg'}
+    }
+    create_response = client.post('/posts', json=post_data)
+    post = create_response.get_json()
+
+    # Now, edit the content of the post
+    edit_data = {
+        'content': 'Updated content'
+    }
+
+    # Make a PUT request to update the post
+    response = client.put(f'/posts/{post["id"]}', json=edit_data)
+    
+    # Assert the status code is 200 OK
+    assert response.status_code == 200
+
+    # Assert that the post content has been updated
+    updated_post = response.get_json()
+    assert updated_post['content'] == 'Updated content'
+
+def test_edit_non_existent_post(client):
+    # Attempt to edit a non-existent post
+    edit_data = {
+        'content': 'Updated content'
+    }
+
+    # Make a PUT request with a random post ID that doesn't exist
+    response = client.put('/posts/nonexistent_id', json=edit_data)
+    
+    # Assert the status code is 404 Not Found
+    assert response.status_code == 404
+
+    # Assert the response message
+    assert response.json['message'] == 'Post not found'
+
+# def test_add_comment(client):
+#     # First, create a post
+#     post_data = {
+#         'content': 'This is a test post',
+#         'author': 'Test Author',
+#         'media': {'type': 'image', 'uri': 'http://example.com/image.jpg'}
+#     }
+#     create_response = client.post('/posts', json=post_data)
+#     post = create_response.get_json()
+
+#     # Now, add a comment to the post
+#     comment_data = {
+#         'content': 'This is a test comment',
+#         'author': 'Commenter'
+#     }
+#     response = client.post(f'/posts/{post["id"]}/comments', json=comment_data)
+
+#     # Assert the status code is 201 Created
+#     assert response.status_code == 201
+
+#     # Assert the comment data is correctly added
+#     comment = response.get_json()
+#     assert 'id' in comment
+#     assert comment['content'] == 'This is a test comment'
+#     assert comment['author'] == 'Commenter'
+#     assert comment['post_id'] == post['id']
+
+def test_vote_on_post(client):
+    # First, create a post
+    post_data = {
+        'content': 'This is a test post',
+        'author': 'Test Author',
+        'media': {'type': 'image', 'uri': 'http://example.com/image.jpg'}
+    }
+    create_response = client.post('/posts', json=post_data)
+    post = create_response.get_json()
+
+    # Vote up the post
+    vote_data = {'vote_type': 'up'}
+    response = client.post(f'/posts/{post["id"]}/vote', json=vote_data)
+
+    # Assert the status code is 200 OK
+    assert response.status_code == 200
+
+    # Assert the vote count is incremented
+    updated_post = response.get_json()
+    assert updated_post['upvotes'] == 1
+    assert updated_post['downvotes'] == 0
+
+    # Vote down the post
+    vote_data = {'vote_type': 'down'}
+    response = client.post(f'/posts/{post["id"]}/vote', json=vote_data)
+
+    # Assert the status code is 200 OK
+    assert response.status_code == 200
+
+    # Assert the vote count is updated correctly
+    updated_post = response.get_json()
+    assert updated_post['upvotes'] == 1
+    assert updated_post['downvotes'] == 1
+
+# def test_upload_media(client):
+#     # Mock a file upload
+#     with open('test_image.jpg', 'rb') as f:
+#         files = {'file': f}
+#         data = {'type': 'image'}
+#         response = client.post('/media/upload', data=data, content_type='multipart/form-data', files=files)
+        
+#     # Assert the status code is 200 OK
+#     assert response.status_code == 200
+
+#     # Assert the response contains the correct media details
+#     media_response = response.get_json()
+#     assert media_response['message'] == 'Media uploaded successfully'
+#     assert media_response['type'] == 'image'
+#     assert 'uri' in media_response

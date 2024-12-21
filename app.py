@@ -100,9 +100,9 @@ def reset_password(token):
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
-    print(f"Old password hash: {user.password_hash}")  # Debug: print old password hash
+    
     user.password_hash = generate_password_hash(new_password)
-    print(f"New password hash: {user.password_hash}")  # Debug: print new password hash
+    
 
     try:
         db.session.commit()  # Ensure the session is committed
@@ -278,9 +278,7 @@ def login():
     user = User.query.filter_by(email=email).first()
     if not user:
         return jsonify({'message': 'Invalid email or password!'}), 400
-
-    # Add debugging print
-    print(f"Fetched user: {user.username}, Hash: {user.password_hash}")
+        
 
     if not check_password_hash(user.password_hash, password):
         return jsonify({'message': 'Invalid email or password!'}), 400

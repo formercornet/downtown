@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main  # Trigger the workflow on push to the main branch
+  pull_request:
+    branches:
+      - main  # Trigger the workflow on pull requests to the main branch
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # Use the latest Ubuntu runner
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2  # Check out the code from your repository
+
+    - name: Set up Python
+      uses: actions/setup-python@v2  # Set up Python (you can specify a version here)
+
+      with:
+        python-version: '3.9'  # Set Python version (use the version your project requires)
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip  # Upgrade pip
+        pip install -r requirements.txt    # Install dependencies from requirements.txt
+
+    - name: Run tests
+      run: |
+        pytest  # Assuming you use pytest for testing
+
