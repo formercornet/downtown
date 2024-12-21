@@ -126,3 +126,202 @@ def google_callback():
 @google.tokengetter
 def get_google_token():
     return session.get('google_token')
+
+def token_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 403
+        try:
+            # Extract the token after "Bearer "
+            token = token.split(" ")[1]
+            data = jwt.decode(token, app.secret_key, algorithms=["HS256"])
+            current_user = User.query.filter_by(user_id=data['user_id']).first()
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired!'}), 403
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Token is invalid!'}), 403
+        return f(current_user, *args, **kwargs)
+    return decorated_function
+
+# Registration Route - Simplified for backend testing
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()  # Get data as JSON
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
+    password_confirm = data.get('password_confirm')
+
+    # Check if passwords match
+    if password != password_confirm:
+        return jsonify({'message': 'Passwords do not match!'}), 400
+
+    # Check if the email already exists
+    existing_user = User.query.filter_by(email=email).first()
+    if existing_user:
+        return jsonify({'message': 'Email already registered!'}), 400
+
+    # Hash the password using werkzeug
+    hashed_password = generate_password_hash(password)
+
+    # Create a new user and add to the database
+    new_user = User(username=username, email=email, password_hash=hashed_password)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({'message': 'Registration successful!'}), 201
+
+# Login Route - Generate JWT token
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'message': 'Missing email or password!'}), 400
+
+    email = data.get('email')
+    password = data.get('password')
+
+    # Fetch the user from the database
+    user = User.query.filter_by(email=email).first()
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'message': 'Invalid email or password!'}), 400
+
+    try:
+        # Generate JWT token
+        token = jwt.encode(
+            {
+                'user_id': user.user_id,
+                'exp': datetime.utcnow() + timedelta(hours=1)  # Expiration in 1 hour
+            },
+            app.secret_key,  # Use the secret key
+            algorithm="HS256"
+        )
+
+        return jsonify({'message': 'Login successful!', 'token': token}), 200
+
+    except Exception as e:
+        return jsonify({'message': 'Token generation failed!', 'error': str(e)}), 500
+
+
+# Protected Route (Example)
+@app.route('/profile', methods=['GET'])
+@token_required
+def profile(current_user):
+    return jsonify({
+        'user_id': current_user.user_id,
+        'username': current_user.username,
+        'email': current_user.email
+    })
+
+# 1. Fetch all posts
+@app.route('/posts', methods=['GET'])
+def get_posts():
+    posts = Post.query.all()
+    return jsonify([post.to_dict() for post in posts])
+
+# 2. Create a new post
+@app.route('/posts', methods=['POST'])
+def create_post():
+    data = request.get_json()
+    content = data.get('content')
+    author = data.get('author')
+    media = data.get('media')  # Media should be passed as a dictionary containing type and uri
+
+    if not content or not author:
+        return jsonify({"message": "Content and author are required"}), 400
+
+    post = Post(
+        id=str(datetime.utcnow().timestamp()),  # Unique ID based on timestamp
+        content=content,
+        author=author,
+        media_type=media['type'] if media else None,
+        media_uri=media['uri'] if media else None
+    )
+
+    db.session.add(post)
+    db.session.commit()
+
+    return jsonify(post.to_dict()), 201
+
+# 3. Edit a post
+@app.route('/posts/<post_id>', methods=['PUT'])
+def edit_post(post_id):
+    post = Post.query.get(post_id)
+    if not post:
+        return jsonify({"message": "Post not found"}), 404
+
+    data = request.get_json()
+    post.content = data.get('content', post.content)
+
+    db.session.commit()
+
+    return jsonify(post.to_dict())
+
+# 4. Add a comment to a post
+@app.route('/posts/<post_id>/comments', methods=['POST'])
+def add_comment(post_id):
+    post = Post.query.get(post_id)
+    if not post:
+        return jsonify({"message": "Post not found"}), 404
+
+    data = request.get_json()
+    comment_content = data.get('content')
+    comment_author = data.get('author')
+
+    if not comment_content or not comment_author:
+        return jsonify({"message": "Content and author are required"}), 400
+
+    comment = Comment(
+        id=str(datetime.utcnow().timestamp()),
+        content=comment_content,
+        author=comment_author,
+        post_id=post_id
+    )
+
+    db.session.add(comment)
+    db.session.commit()
+
+    return jsonify(comment.to_dict()), 201
+
+# 5. Vote on a post (upvote or downvote)
+@app.route('/posts/<post_id>/vote', methods=['POST'])
+def vote_on_post(post_id):
+    data = request.get_json()
+    vote_type = data.get('vote_type')  # "up" or "down"
+
+    if vote_type not in ['up', 'down']:
+        return jsonify({"message": "Invalid vote type"}), 400
+
+    post = Post.query.get(post_id)
+    if not post:
+        return jsonify({"message": "Post not found"}), 404
+
+    if vote_type == 'up':
+        post.upvotes += 1
+    elif vote_type == 'down':
+        post.downvotes += 1
+
+    db.session.commit()
+
+    return jsonify(post.to_dict())
+
+# 6. Upload media (image/video)
+@app.route('/media/upload', methods=['POST'])
+def upload_media():
+    file = request.files['file']
+    file_type = request.form.get('type')  # 'image' or 'video'
+
+    if not file or file_type not in ['image', 'video']:
+        return jsonify({"message": "Invalid file or type"}), 400
+
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+    file.save(file_path)
+
+    return jsonify({"message": "Media uploaded successfully", "uri": file_path, "type": file_type})
+
+# Run the app
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5000)
