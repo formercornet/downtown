@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import jwt
 import os
 from dotenv import load_dotenv
-from flask_oauthlib import OAuth
+from authlib.integrations.flask_client import OAuth  # Updated import
 from flask_login import LoginManager, login_user, UserMixin
 from urllib.parse import urljoin
 
@@ -25,20 +25,20 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 db = SQLAlchemy(app)
 
-oauth = OAuth()
-oauth.init_app(app)
+# Initialize OAuth instance
+oauth = OAuth(app)  # Updated to use Authlib OAuth
 login_manager = LoginManager(app)
 
-google = oauth.remote_app(
+# Configure the Google OAuth client
+google = oauth.register(
     'google',
-    consumer_key=GOOGLE_CLIENT_ID,
-    consumer_secret=GOOGLE_CLIENT_SECRET,
-    request_token_params={'scope': 'email'},
-    base_url='https://www.googleapis.com/oauth2/v1/',
-    request_token_url=None,
-    access_token_method='POST',
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    authorize_url='https://accounts.google.com/o/oauth2/auth',
+    authorize_params=None,
     access_token_url='https://accounts.google.com/o/oauth2/token',
-    authorize_url='https://accounts.google.com/o/oauth2/auth'
+    refresh_token_url=None,
+    client_kwargs={'scope': 'openid profile email'},
 )
 
 # Enable CORS for the app
@@ -96,16 +96,17 @@ with app.app_context():
 
 @app.route('/auth/google')
 def google_login():
-    return google.authorize(callback=url_for('google_callback', _external=True))
+    # Initiates OAuth flow
+    redirect_uri = url_for('google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
 
 @app.route('/auth/google/callback')
 def google_callback():
-    resp = google.authorized_response()
-    if resp is None or 'access_token' not in resp:
-        return 'Access denied', 403
-
-    session['google_token'] = (resp['access_token'], '')
-    user_info = google.get('userinfo').data
+    # Get the OAuth response and fetch user info
+    token = google.authorize_access_token()
+    user_info = google.get('userinfo').json()
+    
+    # Extract email from the response
     email = user_info['email']
     
     # Check if the user already exists in the database
@@ -116,9 +117,11 @@ def google_callback():
         db.session.add(new_user)
         db.session.commit()
 
-    # Process the user information (e.g., log them in)
+    # Log the user in
+    user = User.query.filter_by(email=email).first()
+    login_user(user)
+
     return 'Logged in successfully', 200
-    
 
 @google.tokengetter
 def get_google_token():
