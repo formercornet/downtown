@@ -276,24 +276,26 @@ def login():
 
     # Fetch the user from the database
     user = User.query.filter_by(email=email).first()
-    if not user or not check_password_hash(user.password_hash, password):
+    if not user:
         return jsonify({'message': 'Invalid email or password!'}), 400
 
-    try:
-        # Generate JWT token
-        token = jwt.encode(
-            {
-                'user_id': user.user_id,
-                'exp': datetime.utcnow() + timedelta(hours=1)  # Expiration in 1 hour
-            },
-            app.secret_key,  # Use the secret key
-            algorithm="HS256"
-        )
+    # Add debugging print
+    print(f"Fetched user: {user.username}, Hash: {user.password_hash}")
 
-        return jsonify({'message': 'Login successful!', 'token': token}), 200
+    if not check_password_hash(user.password_hash, password):
+        return jsonify({'message': 'Invalid email or password!'}), 400
 
-    except Exception as e:
-        return jsonify({'message': 'Token generation failed!', 'error': str(e)}), 500
+    # Generate token
+    token = jwt.encode(
+        {
+            'user_id': user.user_id,
+            'exp': datetime.utcnow() + timedelta(hours=1)
+        },
+        app.secret_key,
+        algorithm="HS256"
+    )
+    return jsonify({'message': 'Login successful!', 'token': token}), 200
+
 
 
 # Protected Route (Example)
