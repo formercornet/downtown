@@ -2,6 +2,8 @@ import pytest
 from app import app, db, Post, Comment, User
 from werkzeug.security import generate_password_hash
 from itsdangerous import URLSafeTimedSerializer
+from io import BytesIO
+import os
 
 serializer = URLSafeTimedSerializer(app.secret_key)
 
@@ -230,18 +232,24 @@ def test_vote_on_post(client):
     assert updated_post['upvotes'] == 1
     assert updated_post['downvotes'] == 1
 
-# def test_upload_media(client):
-#     # Mock a file upload
-#     with open('test_image.jpg', 'rb') as f:
-#         files = {'file': f}
-#         data = {'type': 'image'}
-#         response = client.post('/media/upload', data=data, content_type='multipart/form-data', files=files)
-        
-#     # Assert the status code is 200 OK
-#     assert response.status_code == 200
+def test_upload_media(client):
+    # Prepare a mock file (e.g., an image or video file)
+    data = {
+        'file': (BytesIO(b"fake image content"), 'test_image.jpg'),
+        'type': 'image'  # This could be 'image' or 'video'
+    }
 
-#     # Assert the response contains the correct media details
-#     media_response = response.get_json()
-#     assert media_response['message'] == 'Media uploaded successfully'
-#     assert media_response['type'] == 'image'
-#     assert 'uri' in media_response
+    # Send a POST request to the upload media endpoint
+    response = client.post('/media/upload', data=data, content_type='multipart/form-data')
+
+    # Assert that the response is successful
+    assert response.status_code == 200
+    assert b"Media uploaded successfully" in response.data
+    assert b"uri" in response.data
+
+    # Check that the file was saved
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], 'test_image.jpg')
+    assert os.path.exists(file_path)
+
+    # Cleanup (delete the uploaded file after testing)
+    os.remove(file_path)

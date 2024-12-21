@@ -28,6 +28,13 @@ GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
 
 db = SQLAlchemy(app)
 
+UPLOAD_FOLDER = 'uploads'  # You can also use an absolute path like '/path/to/uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Example: Ensure the 'uploads' directory exists
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+    
 # Initialize OAuth instance
 oauth = OAuth(app)  # Updated to use Authlib OAuth
 login_manager = LoginManager(app)
