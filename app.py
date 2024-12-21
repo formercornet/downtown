@@ -100,11 +100,19 @@ def reset_password(token):
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
-    # Hash the new password and update the user's record
+    print(f"Old password hash: {user.password_hash}")  # Debug: print old password hash
     user.password_hash = generate_password_hash(new_password)
-    db.session.commit()
+    print(f"New password hash: {user.password_hash}")  # Debug: print new password hash
+
+    try:
+        db.session.commit()  # Ensure the session is committed
+        print("Password updated successfully!")  # Debug: confirm commit
+    except Exception as e:
+        print(f"Error committing to DB: {str(e)}")  # Debug: catch any errors during commit
+        return jsonify({'message': 'Error updating password in the database!'}), 500
 
     return jsonify({'message': 'Password has been reset successfully!'}), 200
+
 
 # Enable CORS for the app
 CORS(app, resources={r"/*": {"origins": "https://downtown-production.up.railway.app"}})  # Allow requests from any origin
