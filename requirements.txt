@@ -20,5 +20,5 @@ python-dotenv==1.0.1
 SQLAlchemy==2.0.36
 typing-extensions==4.12.2
 zipp==3.21.0
-Flask-OAuthlib==0.9.6
+flask-oauth==1.2.0
 Flask-Login==0.6.3
