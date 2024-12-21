@@ -85,8 +85,19 @@ def request_password_reset():
     return jsonify({'message': 'Password reset email sent!'}), 200
 
 # Reset Password (Step 2 & 3)
-@app.route('/reset_password/<token>', methods=['POST'])
-def reset_password(token):
+@app.route('/reset_password', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    token = data.get('token')  # Extract token from body
+    new_password = data.get('new_password')
+    password_confirm = data.get('password_confirm')
+
+    if not token or not new_password or not password_confirm:
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    if new_password != password_confirm:
+        return jsonify({'message': 'Passwords do not match!'}), 400
+
     try:
         # Verify the token
         email = serializer.loads(token, salt='password-reset-salt', max_age=3600)  # Token expires after 1 hour
@@ -95,30 +106,20 @@ def reset_password(token):
     except itsdangerous.BadSignature:
         return jsonify({'message': 'Invalid token!'}), 400
 
-    data = request.get_json()
-    new_password = data.get('new_password')
-    password_confirm = data.get('password_confirm')
-
-    if new_password != password_confirm:
-        return jsonify({'message': 'Passwords do not match!'}), 400
-
     # Update the password in the database
     user = User.query.filter_by(email=email).first()
     if not user:
         return jsonify({'message': 'User not found'}), 404
 
-    
     user.password_hash = generate_password_hash(new_password)
-    
-
     try:
-        db.session.commit()  # Ensure the session is committed
-        print("Password updated successfully!")  # Debug: confirm commit
+        db.session.commit()
     except Exception as e:
-        print(f"Error committing to DB: {str(e)}")  # Debug: catch any errors during commit
-        return jsonify({'message': 'Error updating password in the database!'}), 500
+        return jsonify({'message': f'Error updating password in the database: {str(e)}'}), 500
 
     return jsonify({'message': 'Password has been reset successfully!'}), 200
+
+
 
 
 # Enable CORS for the app
